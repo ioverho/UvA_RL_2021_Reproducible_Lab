@@ -11,7 +11,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributions as D
-from torch.distributions import Categorical
 from torch.optim import Adam
 
 import gym
@@ -87,6 +86,20 @@ class ActorDiscrete(nn.Module):
 
         return action
 
+    def compute_trpo_loss(self, probs_new, probs_old, actions, advantages):
+
+        pi_a_s_old = D.Categorical(probs=probs_old.detach())
+        p_a_old = torch.exp(pi_a_s_old.log_prob(actions))
+
+        pi_a_s = D.Categorical(probs=probs_new)
+        p_a = torch.exp(pi_a_s.log_prob(actions))
+
+        L = (p_a / p_a_old * advantages).mean()
+
+        KLD = torch.mean(D.kl.kl_divergence(pi_a_s_old, pi_a_s))
+
+        return L, KLD
+
     def apply_update(self, flattened_grad):
         n = 0
         for p in self.parameters():
@@ -94,6 +107,7 @@ class ActorDiscrete(nn.Module):
             g = flattened_grad[n:n + numel].view(p.shape)
             p.data += g
             n += numel
+
 
 class Critic(nn.Module):
     """Critic using simple MLP as approximator.
@@ -187,15 +201,6 @@ def conjugate_gradient(A, b, delta=0., max_iterations=10):
         x = x_new
     return x
 
-
-def apply_update(grad_flattened):
-    n = 0
-    for p in actor.parameters():
-        numel = p.numel()
-        g = grad_flattened[n:n + numel].view(p.shape)
-        p.data += g
-        n += numel
-
 # ==============================================================================
 # Hyper-parameters
 # ==============================================================================
@@ -225,7 +230,8 @@ critic_optimizer = Adam(critic.parameters(), lr=critic_lr)
 Rollout = namedtuple('Rollout', ['states', 'actions', 'rewards', 'next_states', ])
 
 def train(epochs=100):
-    mean_total_rewards = []
+    total_rewards_mean = []
+    total_rewards_se = []
 
     for epoch in range(epochs):
         rollouts = []
@@ -284,15 +290,7 @@ def train(epochs=100):
         # ======================================================================
         probs = actor.forward(states, clamp=True)
 
-        pi_a_s_old = D.Categorical(probs=probs.detach())
-        p_a_old = torch.exp(pi_a_s_old.log_prob(actions))
-
-        pi_a_s = D.Categorical(probs=probs)
-        p_a = torch.exp(pi_a_s.log_prob(actions))
-
-        L = (p_a / p_a_old * advantages).mean()
-
-        KLD = torch.mean(D.kl.kl_divergence(pi_a_s_old, pi_a_s))
+        L, KLD = actor.compute_trpo_loss(probs, probs, actions, advantages)
 
         # ======================================================================
         # Gather gradients & KL + Fisher matrix for actor update
@@ -316,33 +314,38 @@ def train(epochs=100):
 
             proposal_update = (ls_step_coef ** ii) * max_step
 
-            apply_update(proposal_update)
+            actor.apply_update(proposal_update)
 
             with torch.no_grad():
                 probs_prime = actor.forward(states, clamp=True)
 
-                pi_a_s_prime = D.Categorical(probs=probs_prime)
-                p_a_prime = torch.exp(pi_a_s_prime.log_prob(actions))
+                L_prime, KLD_prime = actor.compute_trpo_loss(probs_prime, probs, actions, advantages)
 
-                KL_new = torch.mean(D.kl.kl_divergence(pi_a_s_old, pi_a_s_prime))
+            delta_L = L_prime - L
 
-                L_new = torch.mean(p_a_prime / p_a_old * advantages)
-
-            L_improvement = L_new - L
-
-            if L_improvement > 0 and KL_new <= max_d_kl:
+            if delta_L > 0 and KLD_prime <= max_d_kl:
                 break
 
             else:
-                apply_update(-proposal_update)
+                actor.apply_update(-proposal_update)
 
-        mtr = np.mean(rollout_total_rewards)
-        print(f'E: {epoch}.\tMean total reward across {batch_size} rollouts: {mtr}')
+        mean_total_rewards = np.mean(rollout_total_rewards)
+        se_total_rewards = np.std(rollout_total_rewards) / np.sqrt(batch_size)
 
-        mean_total_rewards.append(mtr)
+        total_rewards_mean.append(mean_total_rewards)
+        total_rewards_se.append(se_total_rewards)
 
-    plt.plot(mean_total_rewards)
+        print(f'{epoch:>3d} | Reward {mean_total_rewards:>7.2f} +/- {se_total_rewards:<5.2f}, Max step length {max_length:.2f},  Step norm {np.linalg.norm(proposal_update):.2e}')
+
+    total_rewards_mean = np.array(total_rewards_mean)
+    total_rewards_se = np.array(total_rewards_se)
+
+    plt.plot(np.arange(epochs), total_rewards_mean, 'k-')
+    plt.fill_between(np.arange(epochs),
+                     total_rewards_mean - total_rewards_se,
+                     total_rewards_mean + total_rewards_se,
+                     alpha=0.5)
     plt.show()
 
 # Train our agent
-train(epochs)
+train(50)
