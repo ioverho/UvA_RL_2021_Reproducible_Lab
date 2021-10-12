@@ -14,6 +14,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributions as D
 from torch.optim import Adam
+from torch.utils.tensorboard import SummaryWriter
 
 import gym
 
@@ -67,7 +68,7 @@ def train(args):
     print(f"Training on {device}")
 
     # == Logging
-    # TODO: add tensorboard support
+    writer = SummaryWriter(log_dir=f"{CHECKPOINT_DIR}/{full_version}")
 
     # TODO: add checkpointing
     print(f"Saving to {CHECKPOINT_DIR}/{full_version}/checkpoints")
@@ -109,6 +110,9 @@ def train(args):
         # ======================================================================
         # Generate batched episode
         # ======================================================================
+        actor.eval()
+        critic.eval()
+
         for _ in range(config['train']['batch_size']):
             state = env.reset()
             done = False
@@ -142,6 +146,9 @@ def train(args):
         # ======================================================================
         # Use episode to gather states, actions and advantages based on both
         # ======================================================================
+        actor.train()
+        critic.train()
+
         states = torch.cat([r.states for r in rollouts], dim=0)
         actions = torch.cat([r.actions for r in rollouts], dim=0).flatten()
 
@@ -208,7 +215,69 @@ def train(args):
         total_rewards_mean.append(mean_total_rewards)
         total_rewards_se.append(se_total_rewards)
 
-        print(f'{episode:>3d} | Reward {mean_total_rewards:>7.2f} +/- {se_total_rewards:<5.2f}, Max step length {max_length:.2f},  KL-boundary coeff {KL_boundary_coeff :.2f}, Effective learning rate {KL_boundary_coeff * max_length :.2f},  Step norm {np.linalg.norm(search_dir):.2e}')
+        # ======================================================================
+        # Logging
+        # ======================================================================
+        if episode % config['run']['logging_frequency'] == 0:
+            print(f'{episode:>3d} | Reward {mean_total_rewards:>7.2f} +/- {se_total_rewards:<5.2f}, Max step length {max_length:.2f},  KL-boundary coeff {KL_boundary_coeff :.2f}, Effective learning rate {KL_boundary_coeff * max_length :.2f},  Step norm {np.linalg.norm(search_dir):.2e}')
+
+            writer.add_scalars(
+                main_tag='Reward',
+                tag_scalar_dict={
+                    'Mean': mean_total_rewards,
+                    '-SE': mean_total_rewards - se_total_rewards,
+                    '+SE': mean_total_rewards + se_total_rewards
+                },
+                global_step=episode
+            )
+
+            writer.add_scalars(
+                main_tag='Step size',
+                tag_scalar_dict={
+                    'Max Step Size': max_length,
+                    'KL Boundary Coeff.': KL_boundary_coeff,
+                    'Effective Learning Rate': KL_boundary_coeff * max_length
+                },
+                global_step=episode
+            )
+
+            writer.add_scalar(
+                tag='Update/Loss Improvement',
+                scalar_value=delta_L,
+                global_step=episode
+            )
+
+            writer.add_scalar(
+                tag='Update/KL Divergence',
+                scalar_value=KLD_prime,
+                global_step=episode
+            )
+
+            writer.add_scalar(
+                tag='Gradient/Norm',
+                scalar_value=np.linalg.norm(search_dir),
+                global_step=episode
+            )
+
+            writer.add_scalar(
+                tag='Gradient/Mean',
+                scalar_value=torch.mean(search_dir),
+                global_step=episode
+            )
+
+            writer.add_scalar(
+                tag='Gradient/Standard Deviation',
+                scalar_value=torch.std(search_dir),
+                global_step=episode
+            )
+
+            writer.add_histogram(
+                tag='Gradient/Histogram',
+                values=search_dir,
+                global_step=episode
+            )
+
+            writer.flush()
 
     total_rewards_mean = np.array(total_rewards_mean)
     total_rewards_se = np.array(total_rewards_se)
@@ -220,6 +289,17 @@ def train(args):
                         total_rewards_mean + total_rewards_se,
                         alpha=0.5)
         plt.show()
+
+    writer.close()
+
+    torch.save({
+            'episode': episode,
+            'reward': total_rewards_mean[-1],
+            'actor_state_dict': actor.state_dict(),
+            'critic_state_dict': critic.state_dict(),
+            'critic_optimizer_state_dict': critic_optimizer.state_dict()
+        },
+               f"{CHECKPOINT_DIR}/{full_version}/checkpoints/checkpoint")
 
 
 if __name__ == '__main__':

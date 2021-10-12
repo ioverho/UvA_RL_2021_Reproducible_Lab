@@ -37,3 +37,4 @@ run:
   gpu: False
   set_gpu_deterministic: True
   plot_rewards: True
+  logging_frequency: 1
