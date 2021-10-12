@@ -101,6 +101,14 @@ class ActorDiscrete(nn.Module):
             p.data += g
             n += numel
 
+    def policy_entropy(self, probs):
+
+        pi_a_s = D.Categorical(probs=probs)
+
+        H_pi_a_s = torch.mean(pi_a_s.entropy())
+
+        return H_pi_a_s
+
 
 class Critic(nn.Module):
     """Critic using simple MLP as approximator.

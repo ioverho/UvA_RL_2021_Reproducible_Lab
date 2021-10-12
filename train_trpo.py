@@ -70,7 +70,6 @@ def train(args):
     # == Logging
     writer = SummaryWriter(log_dir=f"{CHECKPOINT_DIR}/{full_version}")
 
-    # TODO: add checkpointing
     print(f"Saving to {CHECKPOINT_DIR}/{full_version}/checkpoints")
 
     # == Environment Setup
@@ -170,6 +169,8 @@ def train(args):
 
         L, KLD = actor.compute_trpo_loss(probs, probs, actions, advantages)
 
+        pre_update_policy_entropy = actor.policy_entropy(probs.detach())
+
         # ======================================================================
         # Gather gradients & KL + Fisher matrix for actor update
         # ======================================================================
@@ -198,6 +199,8 @@ def train(args):
             with torch.no_grad():
                 probs_prime = actor.forward(states, clamp=True)
 
+                post_update_policy_entropy = actor.policy_entropy(probs_prime.detach())
+
                 L_prime, KLD_prime = actor.compute_trpo_loss(
                     probs_prime, probs, actions, advantages)
 
@@ -221,13 +224,9 @@ def train(args):
         if episode % config['run']['logging_frequency'] == 0:
             print(f'{episode:>3d} | Reward {mean_total_rewards:>7.2f} +/- {se_total_rewards:<5.2f}, Max step length {max_length:.2f},  KL-boundary coeff {KL_boundary_coeff :.2f}, Effective learning rate {KL_boundary_coeff * max_length :.2f},  Step norm {np.linalg.norm(search_dir):.2e}')
 
-            writer.add_scalars(
-                main_tag='Reward',
-                tag_scalar_dict={
-                    'Mean': mean_total_rewards,
-                    '-SE': mean_total_rewards - se_total_rewards,
-                    '+SE': mean_total_rewards + se_total_rewards
-                },
+            writer.add_scalar(
+                tag='Mean Reward',
+                scalar_value=mean_total_rewards,
                 global_step=episode
             )
 
@@ -237,6 +236,15 @@ def train(args):
                     'Max Step Size': max_length,
                     'KL Boundary Coeff.': KL_boundary_coeff,
                     'Effective Learning Rate': KL_boundary_coeff * max_length
+                },
+                global_step=episode
+            )
+
+            writer.add_scalars(
+                main_tag='Policy Mean Entropy',
+                tag_scalar_dict={
+                    'Pre-update': pre_update_policy_entropy,
+                    'Post-update': post_update_policy_entropy
                 },
                 global_step=episode
             )
@@ -256,12 +264,6 @@ def train(args):
             writer.add_scalar(
                 tag='Gradient/Norm',
                 scalar_value=np.linalg.norm(search_dir),
-                global_step=episode
-            )
-
-            writer.add_scalar(
-                tag='Gradient/Mean',
-                scalar_value=torch.mean(search_dir),
                 global_step=episode
             )
 
