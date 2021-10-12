@@ -47,6 +47,7 @@ class RELuMLP(nn.Module):
 
         return logits
 
+
 class ActorDiscrete(nn.Module):
     """Actor with discrete actions.
     """
@@ -125,6 +126,7 @@ class Critic(nn.Module):
         logits = self.model(s)
 
         return logits
+
 
 # ==============================================================================
 # Train Functions
@@ -335,7 +337,7 @@ def train(epochs=100):
         total_rewards_mean.append(mean_total_rewards)
         total_rewards_se.append(se_total_rewards)
 
-        print(f'{epoch:>3d} | Reward {mean_total_rewards:>7.2f} +/- {se_total_rewards:<5.2f}, Max step length {max_length:.2f},  Step norm {np.linalg.norm(proposal_update):.2e}')
+        print(f'{epoch:>3d} | Reward {mean_total_rewards:>7.2f} +/- {se_total_rewards:<5.2f}, Max step length {max_length:.2f},  KL-boundary coeff {ls_step_coef ** ii :.2f}, Effective learning rate {(ls_step_coef ** ii) * max_length :.2f},  Step norm {np.linalg.norm(proposal_update):.2e}')
 
     total_rewards_mean = np.array(total_rewards_mean)
     total_rewards_se = np.array(total_rewards_se)
