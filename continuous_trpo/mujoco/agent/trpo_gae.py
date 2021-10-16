@@ -97,9 +97,10 @@ def conjugate_gradient(actor, states, b, nsteps, residual_tol=1e-10):
 
 
 def train_model(actor, critic, memory, actor_optim, critic_optim):
+    stats = {}
+
     memory = np.array(memory)
-    # print("memory: ", memory.shape)
-    # exit(1)
+
     states = np.vstack(memory[:, 0])
     actions = list(memory[:, 1])
     rewards = list(memory[:, 2])
@@ -134,10 +135,16 @@ def train_model(actor, critic, memory, actor_optim, critic_optim):
 
     # step_size = maximum step size (bij ivo)
     step_size = 1 / torch.sqrt(shs / hp.max_kl)[0]
+    stats['max_length'] = step_size
 
-
-    
+    # Dit heet max_step bij Ivo
     full_step = step_size * step_dir
+    
+    # TODO: We hadden gezegd gradient is fraction*full_step, maar dat is dnk ik anders in ivo zijn code
+    # Gradient is step_dir
+    # full step is die gradient * step_size
+    stats['search_dir'] = step_dir 
+    stats['full_step'] = full_step 
 
     # ----------------------------
     # step 5: do backtracking line search for n times
@@ -147,6 +154,8 @@ def train_model(actor, critic, memory, actor_optim, critic_optim):
 
     flag = False
     fraction = 1.0
+
+    
 
     # Line search steps = 10
     for i in range(10):
@@ -166,19 +175,28 @@ def train_model(actor, critic, memory, actor_optim, critic_optim):
               'number of line search: {}'
               .format(kl.data.numpy(), loss_improve, expected_improve[0], i))
 
+        stats['delta_L'] = loss_improve / expected_improve
+        stats['KLD_prime'] = kl
+
         # see https: // en.wikipedia.org / wiki / Backtracking_line_search
         if kl < hp.max_kl and (loss_improve / expected_improve) > 0.5:
             flag = True
+            stats['KL_boundary_coeff'] = fraction
+            
             break
 
         # Line search step coefficient = 0.5
         # Dit ook loggenn,m dit is de kl boundary coefficient
         fraction *= 0.5
+        stats['KL_boundary_coeff'] = fraction
+
 
     if not flag:
         params = flat_params(old_actor)
         update_model(actor, params)
         print('policy update does not impove the surrogate')
+
+    return stats
 
 
 
