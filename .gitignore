@@ -1,6 +1,6 @@
 # DL Stuff
 /data/*
-/checkpoints/*
+*/checkpoints/*
 
 /continuous_trpo/mujoco/logs/*
 /continuous_trpo/mujoco/save_model/*

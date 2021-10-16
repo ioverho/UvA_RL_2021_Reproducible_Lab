@@ -18,16 +18,16 @@ from torch.utils.tensorboard import SummaryWriter
 
 import gym
 
-from models import ActorDiscrete, Critic
-from rl_utils import estimate_advantages, flat_grad, conjugate_gradient
-from utils import find_version, set_seed, set_deterministic
+from discrete_trpo.models import ActorDiscrete, Critic
+from discrete_trpo.rl_utils import estimate_advantages, flat_grad, conjugate_gradient
+from discrete_trpo.utils import find_version, set_seed, set_deterministic
 
-CHECKPOINT_DIR = './checkpoints'
+CHECKPOINT_DIR = './discrete_trpo/checkpoints'
 
 # ==============================================================================
 # Main loop
 # ==============================================================================
-def train(args):
+def train(args, seed=None):
     # ==========================================================================
     # Read in config file
     # ==========================================================================
@@ -39,6 +39,11 @@ def train(args):
     print(yaml.dump(config))
     print(50 * "+")
 
+    if seed == None:
+        seed = config['run']['seed']
+    else:
+        print(f"\nExperiment seed overwritten to {seed}!\n")
+
     # ==========================================================================
     # Experimental Setup
     # ==========================================================================
@@ -47,12 +52,12 @@ def train(args):
     # == Version
     # ==== ./checkpoints/data_version/version_number
     experiment_dir = config['env'] + \
-        "_" + config['run']['experiment_name'] + \
-            "_" + str(config['run']['seed'])
+        "_" + config['run']['experiment_name']
 
-    full_version, _, _ = find_version(experiment_dir,
-                                      CHECKPOINT_DIR,
-                                      debug=config['run']['debug'])
+    if config['run']['debug']:
+        full_version = f"{experiment_dir}/debug"
+    else:
+        full_version = f"{experiment_dir}/seed_{seed}"
 
     os.makedirs(f"{CHECKPOINT_DIR}/{full_version}", exist_ok=True)
     os.makedirs(f"{CHECKPOINT_DIR}/{full_version}/checkpoints", exist_ok=True)
@@ -79,7 +84,7 @@ def train(args):
     num_actions = env.action_space.n
 
     # == Reproducibility
-    set_seed(config['run']['seed'], env)
+    set_seed(seed, env)
     if config['run']['set_gpu_deterministic']:
         set_deterministic()
 
@@ -154,15 +159,6 @@ def train(args):
         advantages = estimate_advantages(rollouts, critic)
 
         # ======================================================================
-        # Update the critic
-        # ======================================================================
-        critic_loss = 0.5 * torch.mean(advantages ** 2)
-
-        critic_optimizer.zero_grad()
-        critic_loss.backward()
-        critic_optimizer.step()
-
-        # ======================================================================
         # TRPO Actor Loss
         # ======================================================================
         probs = actor.forward(states, clamp=True)
@@ -185,6 +181,16 @@ def train(args):
         search_dir = conjugate_gradient(HVP, g)
         max_length = torch.sqrt(2 * config['trpo']['max_d_kl'] / (search_dir @ HVP(search_dir)))
         max_step = max_length * search_dir
+
+        # Clip gradient
+        if episode / config['train']['episodes'] >= 0.01:
+            if np.linalg.norm(max_step) >= config['trpo']['max_grad_norm']:
+                clip_coeff = config['trpo']['max_grad_norm'] / (np.linalg.norm(max_step) + 1e-6)
+
+                if clip_coeff < 1:
+                    max_step = clip_coeff * max_step
+
+            assert np.linalg.norm(max_step) <= config['trpo']['max_grad_norm'], "Update norm out-of-bounds"
 
         # ======================================================================
         # Line search over possible step sizes
@@ -209,8 +215,8 @@ def train(args):
             if delta_L > 0 and KLD_prime <= config['trpo']['max_d_kl']:
                 break
 
-            else:
-                actor.apply_update(-proposal_update)
+            #elif ii != config['trpo']['max_ls_steps'] - 1:
+            actor.apply_update(-proposal_update)
 
         mean_total_rewards = np.mean(rollout_total_rewards)
         se_total_rewards = np.std(rollout_total_rewards) / np.sqrt(config['train']['batch_size'])
@@ -219,10 +225,19 @@ def train(args):
         total_rewards_se.append(se_total_rewards)
 
         # ======================================================================
+        # Update the critic
+        # ======================================================================
+        critic_loss = 0.5 * torch.mean(advantages ** 2)
+
+        critic_optimizer.zero_grad()
+        critic_loss.backward()
+        critic_optimizer.step()
+
+        # ======================================================================
         # Logging
         # ======================================================================
         if episode % config['run']['logging_frequency'] == 0:
-            print(f'{episode:>3d} | Reward {mean_total_rewards:>7.2f} +/- {se_total_rewards:<5.2f}, Max step length {max_length:.2f},  KL-boundary coeff {KL_boundary_coeff :.2f}, Effective learning rate {KL_boundary_coeff * max_length :.2f},  Step norm {np.linalg.norm(search_dir):.2e}')
+            print(f'{episode:>3d} | Reward {mean_total_rewards:>7.2f} +/- {se_total_rewards:<5.2f}, Max step length {max_length:>5.2f},  KL-boundary coeff {KL_boundary_coeff :.2f}, Effective learning rate {KL_boundary_coeff * max_length :>5.2f},  Step norm {np.linalg.norm(proposal_update):.2e}')
 
             writer.add_scalar(
                 tag='Mean Reward',
@@ -230,22 +245,33 @@ def train(args):
                 global_step=episode
             )
 
-            writer.add_scalars(
-                main_tag='Step size',
-                tag_scalar_dict={
-                    'Max Step Size': max_length,
-                    'KL Boundary Coeff.': KL_boundary_coeff,
-                    'Effective Learning Rate': KL_boundary_coeff * max_length
-                },
+            writer.add_scalar(
+                tag='TRPO Learning Rate/Max',
+                scalar_value=max_length,
                 global_step=episode
             )
 
-            writer.add_scalars(
-                main_tag='Policy Mean Entropy',
-                tag_scalar_dict={
-                    'Pre-update': pre_update_policy_entropy,
-                    'Post-update': post_update_policy_entropy
-                },
+            writer.add_scalar(
+                tag='TRPO Learning Rate/Line Search Scalar',
+                scalar_value=KL_boundary_coeff,
+                global_step=episode
+            )
+
+            writer.add_scalar(
+                tag='TRPO Learning Rate/Effective Learning Rate',
+                scalar_value=KL_boundary_coeff * max_length,
+                global_step=episode
+            )
+
+            writer.add_scalar(
+                tag='Policy Mean Entropy/Pre Update',
+                scalar_value=pre_update_policy_entropy,
+                global_step=episode
+            )
+
+            writer.add_scalar(
+                tag='Policy Mean Entropy/Post Update',
+                scalar_value=post_update_policy_entropy,
                 global_step=episode
             )
 
@@ -262,20 +288,14 @@ def train(args):
             )
 
             writer.add_scalar(
-                tag='Gradient/Norm',
-                scalar_value=np.linalg.norm(search_dir),
+                tag='Norms/Grad',
+                scalar_value=np.linalg.norm(g),
                 global_step=episode
             )
 
             writer.add_scalar(
-                tag='Gradient/Standard Deviation',
-                scalar_value=torch.std(search_dir),
-                global_step=episode
-            )
-
-            writer.add_histogram(
-                tag='Gradient/Histogram',
-                values=search_dir,
+                tag='Norms/Update',
+                scalar_value=np.linalg.norm(proposal_update),
                 global_step=episode
             )
 
@@ -287,9 +307,9 @@ def train(args):
     if config['run']['plot_rewards']:
         plt.plot(np.arange(config['train']['episodes']), total_rewards_mean, 'k-')
         plt.fill_between(np.arange(config['train']['episodes']),
-                        total_rewards_mean - total_rewards_se,
-                        total_rewards_mean + total_rewards_se,
-                        alpha=0.5)
+                         total_rewards_mean - total_rewards_se,
+                         total_rewards_mean + total_rewards_se,
+                         alpha=0.5)
         plt.show()
 
     writer.close()
@@ -312,13 +332,31 @@ if __name__ == '__main__':
 
     # Model hyperparameters
     parser.add_argument('--config_file_path',
-                        default='./configs/test.yaml',
+                        default='./discrete_trpo/configs/CartPole_v1.yaml',
                         type=str)
+
+    parser.add_argument('--seed',
+                        default=[0,1,2,3,4,5,6,7,8,9],
+                        type=int,
+                        nargs='+')
 
     args = parser.parse_args()
 
     #* WARNINGS FILTER
     #! THESE ARE KNOWN, REDUNDANT WARNINGS
     warnings.filterwarnings('ignore', message=r'.*Named tensors.*')
+    warnings.filterwarnings('ignore', message=r'.*Matplotlib*')
 
-    train(args)
+    if isinstance(args.seed, list):
+        # If multiple seeds are provided
+        for seed in args.seed:
+            train(args, seed=seed)
+
+    elif isinstance(args.seed, int):
+        # If only 1
+        train(args, seed=args.seed)
+
+    else:
+        # None
+        # Uses default in yaml file
+        train(args)

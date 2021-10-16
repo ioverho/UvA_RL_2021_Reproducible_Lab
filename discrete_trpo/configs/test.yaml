@@ -1,5 +1,5 @@
 # The environment on which we're testing
-env: 'CartPole-v1'
+env: 'MountainCar-v0'
 
 # Arguments passed to actor
 actor:
@@ -26,8 +26,9 @@ trpo:
 
 # General DL training parameters
 train:
-  batch_size: 16
-  episodes: 50
+  batch_size: 8
+  episodes: 2000
+  max_grad_norm: 100.0
 
 # Experimental control
 run:
