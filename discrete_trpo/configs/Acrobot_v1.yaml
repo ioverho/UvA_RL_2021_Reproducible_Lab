@@ -17,9 +17,9 @@ critic:
 # TRPO hyper-parameters
 trpo:
   # Maximum allowed KL-divergence
-  max_d_kl: 5.0e-2
+  max_d_kl: 1.0e-2
   # Maximum line search steps
-  max_ls_steps: 25
+  max_ls_steps: 10
   # Factor by which to reduce step-size
   # if max_d_kl is exceeded in line search
   ls_step_coef: 0.9
@@ -27,25 +27,16 @@ trpo:
 
 # General DL training parameters
 train:
-  batch_size: 8
+  batch_size: 32
   episodes: 500
+  max_steps_per_sample: 200
 
 # Experimental control
 run:
-  experiment_name: test
+  experiment_name: report_v2
   debug: False
-  seed:
-    - 0
-    - 1
-    - 2
-    - 3
-    - 4
-    - 5
-    - 6
-    - 7
-    - 8
-    - 9
+  seed: 42
   gpu: False
   set_gpu_deterministic: True
-  plot_rewards: True
+  plot_rewards: False
   logging_frequency: 1

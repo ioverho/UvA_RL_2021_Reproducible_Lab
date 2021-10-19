@@ -28,11 +28,12 @@ trpo:
 # General DL training parameters
 train:
   batch_size: 32
-  episodes: 50
+  episodes: 500
+  max_steps_per_sample: 200
 
 # Experimental control
 run:
-  experiment_name: reportv1
+  experiment_name: report_v1
   debug: False
   seed: 42
   gpu: False

@@ -123,6 +123,7 @@ def train(args, seed=None):
 
             samples = []
 
+            i = 0
             while not done:
                 with torch.no_grad():
                     action = actor.sample_action(state)
@@ -132,6 +133,11 @@ def train(args, seed=None):
                 samples.append((state, action, reward, next_state))
 
                 state = next_state
+
+                if i > config['train']['max_steps_per_sample']:
+                    break
+
+                i += 1
 
             # Transpose samples
             states, actions, rewards, next_states = zip(*samples)
@@ -190,7 +196,9 @@ def train(args, seed=None):
                 if clip_coeff < 1:
                     max_step = clip_coeff * max_step
 
-            assert np.linalg.norm(max_step) <= config['trpo']['max_grad_norm'], "Update norm out-of-bounds"
+            if np.linalg.norm(max_step) > config['trpo']['max_grad_norm']:
+                print(f"Update norm, {np.linalg.norm(max_step):.2f}, out-of-bounds. Skipping.")
+                continue
 
         # ======================================================================
         # Line search over possible step sizes
@@ -332,7 +340,7 @@ if __name__ == '__main__':
 
     # Model hyperparameters
     parser.add_argument('--config_file_path',
-                        default='./discrete_trpo/configs/CartPole_v1.yaml',
+                        default='./discrete_trpo/configs/Acrobot_v1.yaml',
                         type=str)
 
     parser.add_argument('--seed',
