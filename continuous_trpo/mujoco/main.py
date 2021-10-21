@@ -1,3 +1,7 @@
+"""
+Trains a (continuous) PG method
+Original code from: https://reinforcement-learning-kr.github.io/2018/06/24/5_trpo/
+"""
 import os
 import gym
 import torch
@@ -5,12 +9,16 @@ import argparse
 import numpy as np
 import torch.optim as optim
 from model import Actor, Critic
-from utils.utils import get_action, save_checkpoint
+from utils.utils import get_action, save_checkpoint, stats_to_writer, format_tf
 from collections import deque
 from utils.running_state import ZFilter
 from hparams import HyperParams as hp
 from tensorboardX import SummaryWriter
-
+from collections import defaultdict
+from pathlib import Path
+import json
+import time
+import shutil
 import datetime
 
 parser = argparse.ArgumentParser()
@@ -26,6 +34,8 @@ parser.add_argument('--plot_freq', type=int, default=1,
                     help='How frequent to log to tensorboard.')
 parser.add_argument('--num_iters', type=int, default=500,
                     help='Number of iterations')
+parser.add_argument('--num_sessions', type=int, default=10,
+                    help='Number of sessions to average the results over')
 
 parser.add_argument('--load_model', type=str, default=None)
 parser.add_argument('--render', default=False, action="store_true")
@@ -53,10 +63,17 @@ if __name__=="__main__":
     logging_freq = args.logging_freq
     num_iters = args.num_iters
     plot_freq = args.plot_freq
+    num_sessions = args.num_sessions
     env = gym.make(args.env)
+
+    # Create an empty output direction
+    output_dir = "./logs_json/{}".format(args.env)
+    shutil.rmtree(output_dir, ignore_errors=True)
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
     print("Start training on env {} with algorithm {}".format(args.env, args.algorithm))
 
-    for session in range(1, 11):
+    for session in range(num_sessions + 1):
+        full_stats = defaultdict(list)
         env.seed(500 + session)
         torch.manual_seed(500 + session)
 
@@ -80,7 +97,6 @@ if __name__=="__main__":
             running_state.rs.n = ckpt['z_filter_n']
             running_state.rs.mean = ckpt['z_filter_m']
             running_state.rs.sum_square = ckpt['z_filter_s']
-
             print("Loaded OK ex. Zfilter N {}".format(running_state.rs.n))
 
         actor_optim = optim.Adam(actor.parameters(), lr=hp.actor_lr)
@@ -137,72 +153,24 @@ if __name__=="__main__":
 
             else:
                 stats = train_model(actor, critic, memory, actor_optim, critic_optim)
+                stats["score_avg"] = float(score_avg)
+
                 if iter % plot_freq == 0:
+                    # add stats to tensorboard
+                    stats_to_writer(writer, stats, iter)
 
-                    writer.add_scalar(
-                            tag='Mean Reward',
-                            scalar_value=float(score_avg),
-                            global_step=iter
-                        )
-
-                    writer.add_scalars(
-                        main_tag='Step size',
-                        tag_scalar_dict={
-                            'Max Step Size': stats["max_length"],
-                            'KL Boundary Coeff.': stats["KL_boundary_coeff"],
-                            'Effective Learning Rate': stats["max_length"] * stats["KL_boundary_coeff"]
-                        },
-                        global_step=iter
-                    )
-
-                    writer.add_scalar(
-                        tag='Update/Loss Improvement',
-                        scalar_value=stats["delta_L"],
-                        global_step=iter
-                    )
-
-                    writer.add_scalar(
-                        tag='Update/KL Divergence',
-                        scalar_value=stats["KLD_prime"],
-                        global_step=iter
-                    )
-
-                    # The gradient (only direction)
-                    writer.add_scalar(
-                        tag='Gradient/Norm',
-                        scalar_value=np.linalg.norm(stats["search_dir"]),
-                        global_step=iter
-                    )
-                    writer.add_scalar(
-                        tag='Gradient/Standard Deviation',
-                        scalar_value=torch.std(stats["search_dir"]),
-                        global_step=iter
-                    )
-                    writer.add_histogram(
-                        tag='Gradient/Histogram',
-                        values=stats["search_dir"],
-                        global_step=iter
-                    )
-
-                    # The gradient (multiplied with stepsize)
-                    writer.add_scalar(
-                        tag='Gradient_full_step/Norm',
-                        scalar_value=np.linalg.norm(stats["full_step"]),
-                        global_step=iter
-                    )
-                    writer.add_scalar(
-                        tag='Gradient_full_step/Standard Deviation',
-                        scalar_value=torch.std(stats["full_step"]),
-                        global_step=iter
-                    )
-                    writer.add_histogram(
-                        tag='Gradient_full_step/Histogram',
-                        values=stats["full_step"],
-                        global_step=iter
-                    )
-
-                    writer.flush()
-
+                    # Add stats to dict
+                    ts = int(time.time())
+                    full_stats["Mean Reward"].append(format_tf(ts, iter, stats["score_avg"]))
+                    full_stats["TRPO Learning Rate/Max"].append(format_tf(ts, iter, stats["max_length"]))
+                    full_stats["TRPO Learning Rate/Line Search Scalar"].append(format_tf(ts, iter, stats["KL_boundary_coeff"]))
+                    full_stats["TRPO Learning Rate/Effective Learning rate"].append(format_tf(ts, iter, stats["Effective Learning rate"]))
+                    full_stats["Update/Loss Improvement"].append(format_tf(ts, iter, stats["delta_L"]))
+                    full_stats["Update/KL Divergence"].append(format_tf(ts, iter, stats["KLD_prime"]))
+                    full_stats["Norms/grad"].append(format_tf(ts, iter, float(np.linalg.norm(stats["norms_grad"]))))
+                    full_stats["Norms/update"].append(format_tf(ts, iter, float(np.linalg.norm(stats["full_step"]))))
+                    full_stats["Norms/search_dir"].append(format_tf(ts, iter, float(np.linalg.norm(stats["search_dir"]))))
+     
             if iter % logging_freq:
                 score_avg = int(score_avg)
 
@@ -221,3 +189,11 @@ if __name__=="__main__":
                     'args': args,
                     'score': score_avg
                 }, filename=ckpt_path)
+
+        for key, value in full_stats.items():
+            keyname = key.replace('/', '_').replace(' ', '_')
+            filename = "/run-{}_{}.json".format(session, keyname)
+            print("dumping ", filename)
+            with open(output_dir + filename, 'w') as fp:
+                json.dump(value, fp)
+

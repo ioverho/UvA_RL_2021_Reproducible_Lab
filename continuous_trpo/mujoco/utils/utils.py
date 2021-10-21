@@ -1,6 +1,66 @@
 import torch
 import math
+import numpy as np
 
+def format_tf(ts, i, metric):
+    return [ts, i, metric]
+
+# Saves stats to Tensorboard writer
+def stats_to_writer(writer, stats, i):
+    writer.add_scalar(
+        tag='Mean Reward',
+        scalar_value=stats["score_avg"],
+        global_step=i
+    )
+
+    writer.add_scalar(
+        tag='TRPO Learning Rate/Max',
+        scalar_value=stats["max_length"],
+        global_step=i
+    )
+
+    writer.add_scalar(
+        tag='TRPO Learning Rate/Line Search Scalar',
+        scalar_value=stats["KL_boundary_coeff"],
+        global_step=i
+    )
+    writer.add_scalar(
+        tag='TRPO Learning Rate/Effective Learning rate',
+        scalar_value=stats["Effective Learning rate"],
+        global_step=i
+    )
+
+    writer.add_scalar(
+        tag='Update/Loss Improvement',
+        scalar_value=stats["delta_L"],
+        global_step=i
+    )
+
+    writer.add_scalar(
+        tag='Update/KL Divergence',
+        scalar_value=stats["KLD_prime"],
+        global_step=i
+    )
+
+    # The gradient (only direction)
+    writer.add_scalar(
+        tag='Norms/grad',
+        scalar_value=np.linalg.norm(stats["norms_grad"]),
+        global_step=i
+    )
+
+    writer.add_scalar(
+        tag='Norms/update',
+        scalar_value=np.linalg.norm(stats["full_step"]),
+        global_step=i
+    )
+
+    writer.add_scalar(
+        tag='Norms/search_dir',
+        scalar_value=np.linalg.norm(stats["search_dir"]),
+        global_step=i
+    )
+    writer.flush()
 
 def get_action(mu, std):
     action = torch.normal(mu, std)

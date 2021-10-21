@@ -121,10 +121,10 @@ def train_model(actor, critic, memory, actor_optim, critic_optim):
     old_policy = log_density(torch.Tensor(actions), mu, std, logstd)
 
     loss = surrogate_loss(actor, advants, states, old_policy.detach(), actions)
-
-    # Loss grad: ook toevegen aan tensorboard
     loss_grad = torch.autograd.grad(loss, actor.parameters())
     loss_grad = flat_grad(loss_grad)
+    stats['norms_grad'] = loss_grad
+    
     step_dir = conjugate_gradient(actor, states, loss_grad.data, nsteps=10)
 
     # ----------------------------
@@ -133,18 +133,10 @@ def train_model(actor, critic, memory, actor_optim, critic_optim):
     shs = 0.5 * (step_dir * fisher_vector_product(actor, states, step_dir)
                  ).sum(0, keepdim=True)
 
-    # step_size = maximum step size (bij ivo)
     step_size = 1 / torch.sqrt(shs / hp.max_kl)[0]
-    stats['max_length'] = step_size
-
-    # Dit heet max_step bij Ivo
+    stats['max_length'] = step_size.item()
     full_step = step_size * step_dir
-    
-    # TODO: We hadden gezegd gradient is fraction*full_step, maar dat is dnk ik anders in ivo zijn code
-    # Gradient is step_dir
-    # full step is die gradient * step_size
     stats['search_dir'] = step_dir 
-    stats['full_step'] = full_step 
 
     # ----------------------------
     # step 5: do backtracking line search for n times
@@ -155,13 +147,10 @@ def train_model(actor, critic, memory, actor_optim, critic_optim):
     flag = False
     fraction = 1.0
 
-    
-
     # Line search steps = 10
     for i in range(10):
-
-        # "Gradient is: fraction*full_step
         new_params = params + fraction * full_step
+        
 
         update_model(actor, new_params)
         new_loss = surrogate_loss(actor, advants, states, old_policy.detach(),
@@ -175,21 +164,17 @@ def train_model(actor, critic, memory, actor_optim, critic_optim):
               'number of line search: {}'
               .format(kl.data.numpy(), loss_improve, expected_improve[0], i))
 
-        stats['delta_L'] = loss_improve / expected_improve
-        stats['KLD_prime'] = kl
+        stats['delta_L'] = loss_improve.item()
+        stats['KLD_prime'] = kl.item()
 
-        # see https: // en.wikipedia.org / wiki / Backtracking_line_search
         if kl < hp.max_kl and (loss_improve / expected_improve) > 0.5:
             flag = True
-            stats['KL_boundary_coeff'] = fraction
-            
             break
-
-        # Line search step coefficient = 0.5
-        # Dit ook loggenn,m dit is de kl boundary coefficient
         fraction *= 0.5
-        stats['KL_boundary_coeff'] = fraction
 
+    stats['full_step'] = fraction * full_step 
+    stats['KL_boundary_coeff'] = fraction
+    stats['Effective Learning rate'] = stats["max_length"] * stats["KL_boundary_coeff"]
 
     if not flag:
         params = flat_params(old_actor)
