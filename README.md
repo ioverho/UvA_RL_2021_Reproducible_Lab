@@ -1,10 +1,11 @@
 # Empirical Analysis of the TRPO Update Step
-<center>Willemijn de Hoop, Siem Teusink, Casper Wortmann, Ivo Verhoeven
-
+<p align="center">
+Willemijn de Hoop, Siem Teusink, Casper Wortmann, Ivo Verhoeven
+<br><br>
 <img src="./figures/Acrobot-v1_pair_plot.png"
      alt="A paired-plot for metrics in the Acrobot-v1 environment"
      style="float: center;" />
-</center>
+</p>
 ===================
 
 ### General info ###
