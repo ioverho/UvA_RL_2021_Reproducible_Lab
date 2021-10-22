@@ -10,13 +10,13 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.ticker as ticker
 
-def get_stats_filename(json_folder, target_measure="Gradient_Norm"):
+OUTPUT_DIR = "./figures/"
+json_folder = "./continuous_trpo/logs_json/"
 
+def get_stats_filename(json_folder, target_measure="Gradient_Norm"):
     relevant_filenames = []
     pathlist = Path(json_folder).rglob('*.json')
-
     for pathname in pathlist:
-
         pathname = str(pathname)
         if target_measure in pathname:
             print("[get_stats_filename] found relevant file ", pathname)
@@ -28,13 +28,11 @@ def combine_json_files(relevant_filenames):
     combined_json = {}
     for filename in relevant_filenames:
         filename_list = filename.replace('-','_').replace('/','_').split("_")
-
-        run = int(filename_list[5])
+        run = int(filename_list[7])
         print("[combine_json_files] run {} added".format(run))
         with open(filename) as json_file:
             data = json.load(json_file)
             combined_json[run] = np.array(data)
-
     return combined_json
 
 def plot_line(x_list, y_list, label, normalize=False, n_smooth=10):
@@ -92,8 +90,8 @@ def plot_lines(target_measure, combined_json_allenvs, envs,
         plt.legend()
 
     plt.gca().yaxis.set_major_formatter(ticker.StrMethodFormatter('{x:,.2f}'))
-    plt.savefig("plots/" + target_measure + ".png", bbox_inches='tight')
-    plt.savefig("plots/" + target_measure + ".pdf", bbox_inches='tight')
+    plt.savefig(OUTPUT_DIR + "cont_trpo_" + target_measure + ".png", bbox_inches='tight')
+    plt.savefig(OUTPUT_DIR + "cont_trpo_" + target_measure + ".pdf", bbox_inches='tight')
     print('[saved]: ', target_measure)
 
 def smooth(x, N):
@@ -109,15 +107,16 @@ def plot_target_measure(json_folder, envs, target_measure="Gradient_Norm", title
     plot_lines(target_measure, combined_json_allenvs, envs=envs, axis_lbl=axis_lbl, title=title,  normalize=normalize, hide_axis=hide_axis)
 
 if __name__=="__main__":
-    json_folder = "./logs_json/"
+    
+    Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
     envs = ["Swimmer-v2", "Walker2d-v2", "Hopper-v2"]
 
-    plot_target_measure(json_folder, envs, target_measure="Mean_Reward", title="Continuous", axis_lbl=[None,None], normalize=True)
+    plot_target_measure(json_folder, envs, target_measure="Mean_Reward", title="Continuous", axis_lbl=["Iteration",None], normalize=True)
     plot_target_measure(json_folder, envs, target_measure="TRPO_Learning_Rate_Max", title=None, axis_lbl=[None,None], normalize=True)
-    plot_target_measure(json_folder, envs, target_measure="TRPO_Learning_Rate_Line_Search_Scalar", title=None, axis_lbl=[None,None])
+    plot_target_measure(json_folder, envs, target_measure="TRPO_Learning_Rate_Line_Search_Scalar", title=None, axis_lbl=["Iteration",None])
     plot_target_measure(json_folder, envs, target_measure="TRPO_Learning_Rate_Effective_Learning_rate", title=None, axis_lbl=[None,None], normalize=True)
     plot_target_measure(json_folder, envs, target_measure="Update_Loss_Improvement", title=None, axis_lbl=[None,None])
-    plot_target_measure(json_folder, envs, target_measure="Update_KL_Divergence", title=None, axis_lbl=[None,None])
+    plot_target_measure(json_folder, envs, target_measure="Update_KL_Divergence", title=None, axis_lbl=["Iteration",None])
 
     plot_target_measure(json_folder, envs, target_measure="Norms_grad", title="Continuous", axis_lbl=[None,None])
     plot_target_measure(json_folder, envs, target_measure="Norms_update", title=None, axis_lbl=["Iteration",None], normalize=False, hide_axis=False)
