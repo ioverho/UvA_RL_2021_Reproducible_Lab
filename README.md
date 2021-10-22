@@ -83,7 +83,22 @@ The results are stored in the folder: [logs_json]/
 
 <tt>environment</tt> can be any of [Swimmer-v2, Walker2d-v2, Hopper-v2].
 
-### 2b. Generating figures
+### 2b. Running the discrete TRPO files.
+Discrete training should work out-of-the-box.
+
+Run the experiment
+```
+python train_trpo.py --config_file_path [config_file] --seed [seed]
+```
+
+Hyperparameters are defined by a config.yaml file, see [here](./discrete_trpo/configs/).
+<tt>config_file</tt> should be a path to a legal config file. Defaults to './discrete_trpo/configs/CartPole_v1.yaml'
+
+
+Can specify 0 (none), 1 (int) or multiple (list of ints) seeds for experimentation. Will overwrite default seed in config file. Defaults to <tt>[0,1,2,3,4,5,6,7,8,9]</tt>. Will run script for every seed, and dump in same checkpoint dir.
+
+### 3. Generating figures
+Download experiment output from [here](https://drive.google.com/drive/folders/11W_kSgnhGsb-wYE91O05mjjQhgdUO_rM?usp=sharing).
 
 Run the figure script (continuous)
 ```
