@@ -32,29 +32,8 @@ Start the environment
 conda activate rlcourse
 ```
 
-
-### 2a. Running the continuous TRPO files.
-
-Install Mujoco
-```
-# TODO
-```
-
-
-Navigate to the continuous_trpo folder
-```
-cd continuous_trpo/mujoco
-```
-
-Run the experiment
-```
-python main.py --env [environment]
-```
-The results are stored in the folder: [logs_json]/
-
-<tt>environment</tt> can be any of [Swimmer-v2, Walker2d-v2, Hopper-v2].
-
-### 2b. Running the discrete TRPO files.
+## 2. Generating discrete results
+### 2a. Running the discrete TRPO files.
 Discrete training should work out-of-the-box.
 
 Run the experiment
@@ -68,13 +47,41 @@ Hyperparameters are defined by a config.yaml file, see [here](./discrete_trpo/co
 
 Can specify 0 (none), 1 (int) or multiple (list of ints) seeds for experimentation. Will overwrite default seed in config file. Defaults to <tt>[0,1,2,3,4,5,6,7,8,9]</tt>. Will run script for every seed, and dump in same checkpoint dir.
 
-### 3. Generating figures
+
+### 2b. Generating figures
 Download experiment output from [here](https://drive.google.com/drive/folders/11W_kSgnhGsb-wYE91O05mjjQhgdUO_rM?usp=sharing).
 
-Run the figure script
+Run the figure script (discrete)
 ```
 python discrete_plots.py --tasks [task_names] --paths [experiment_output_files]
 ```
 The tasks for which we can plot are defined by a list of strings, <tt>task_names</tt>.
 
 <tt>experiment_output_files</tt> should be a list of paths to the tensorboard output of the experiments.
+
+
+
+### 3. Running the continuous TRPO files.
+
+#### 3a. Prerequirement: install Mujoco
+```
+# Installing Mujoco can be quite a hassle.  For installation we refer to:
+https://github.com/reinforcement-learning-kr/pg_travel/wiki/Installing-Mujoco-py-on-Linux
+
+```
+#### 3b. Running the files.
+Run the experiment
+```
+python train_trpo_continuous.py --env [environment]
+```
+The results are stored in the folder: [logs_json]/
+
+<tt>environment</tt> can be any of [Swimmer-v2, Walker2d-v2, Hopper-v2].
+
+
+### 3c. Generating figures
+Run the figure script (continuous)
+```
+python continuous_plots.py 
+```
+The plots will be saved to ./[figures]/
