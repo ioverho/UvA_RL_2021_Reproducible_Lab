@@ -73,5 +73,8 @@ Download experiment output from
 
 Run the figure script
 ```
-TODO
+python discrete_plots.py --tasks [task_names] --paths [experiment_output_files]
 ```
+The tasks for which we can plot are defined by a list of strings, <tt>task_names</tt>.
+
+<tt>experiment_output_files</tt> should be a list of paths to the tensorboard output of the experiments.
