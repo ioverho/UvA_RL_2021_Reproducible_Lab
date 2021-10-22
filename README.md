@@ -89,3 +89,4 @@ Run the figure script (continuous)
 ```
 python continuous_plots.py 
 ```
+The plots will be saved to ./figures/
