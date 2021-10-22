@@ -302,6 +302,12 @@ def train(args, seed=None):
             )
 
             writer.add_scalar(
+                tag='Norms/SearchDir',
+                scalar_value=np.linalg.norm(search_dir),
+                global_step=episode
+            )
+
+            writer.add_scalar(
                 tag='Norms/Update',
                 scalar_value=np.linalg.norm(proposal_update),
                 global_step=episode
@@ -340,7 +346,7 @@ if __name__ == '__main__':
 
     # Model hyperparameters
     parser.add_argument('--config_file_path',
-                        default='./discrete_trpo/configs/Acrobot_v1.yaml',
+                        default='./discrete_trpo/configs/CartPole_v1.yaml',
                         type=str)
 
     parser.add_argument('--seed',

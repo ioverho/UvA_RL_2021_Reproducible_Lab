@@ -1,14 +1,21 @@
-# UvA_RL_2021_Reproducibility_Lab
+# Empirical Analysis of the TRPO Update Step
+<center>Willemijn de Hoop, Siem Teusink, Casper Wortmann, Ivo Verhoeven
+
+<img src="./figures/Acrobot-v1_pair_plot.png"
+     alt="A paired-plot for metrics in the Acrobot-v1 environment"
+     style="float: center;" />
+</center>
 ===================
+
 ### General info ###
-This folder contains all the necessary files for Reproducible research assignment.
+This folder contains all the necessary files for our 'Reproducible Research Assignment' for the University of Amsterdam's 2021 rendition of Reinforcement Learning. Our findings can be found in our [report](./RL_Reproducible_Research_Assignment.pdf).
 
 
 ===================
 ### Folders included ###
 - continuous_trpo            : contains all files related to continuous TRPO training.
 - discrete_trpo              : contains all files related to discrete TRPO training.
-- Figures                    : TRPO training figures. 
+- figures                    : TRPO training figures.
 
 
 ### Generating results ###
@@ -25,7 +32,7 @@ conda activate rlcourse
 ```
 
 
-### 2. Running the continuous TRPO files.
+### 2a. Running the continuous TRPO files.
 
 Install Mujoco
 ```
@@ -33,7 +40,7 @@ Install Mujoco
 ```
 
 
-Navigate to the evoman_framework folder
+Navigate to the continuous_trpo folder
 ```
 cd continuous_trpo/mujoco
 ```
@@ -44,5 +51,26 @@ python main.py --env [environment]
 ```
 The results are stored in the folder: [logs_json]/
 
-environment can be any of [Swimmer-v2, Walker2d-v2, Hopper-v2].
+<tt>environment</tt> can be any of [Swimmer-v2, Walker2d-v2, Hopper-v2].
 
+### 2b. Running the discrete TRPO files.
+Discrete training should work out-of-the-box.
+
+Run the experiment
+```
+python train_trpo.py --config_file_path [config_file] --seed [seed]
+```
+
+Hyperparameters are defined by a config.yaml file, see [here](./discrete_trpo/configs/).
+<tt>config_file</tt> should be a path to a legal config file. Defaults to './discrete_trpo/configs/CartPole_v1.yaml'
+
+
+Can specify 0 (none), 1 (int) or multiple (list of ints) seeds for experimentation. Will overwrite default seed in config file. Defaults to <tt>[0,1,2,3,4,5,6,7,8,9]</tt>. Will run script for every seed, and dump in same checkpoint dir.
+
+### 3. Generating figures
+Download experiment output from
+
+Run the figure script
+```
+TODO
+```

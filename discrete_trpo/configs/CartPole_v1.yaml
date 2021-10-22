@@ -33,7 +33,7 @@ train:
 
 # Experimental control
 run:
-  experiment_name: report_v1
+  experiment_name: report_v2
   debug: False
   seed: 42
   gpu: False
