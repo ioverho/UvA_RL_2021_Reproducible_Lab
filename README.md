@@ -70,14 +70,9 @@ https://github.com/reinforcement-learning-kr/pg_travel/wiki/Installing-Mujoco-py
 
 ```
 #### 3b. Running the files.
-Navigate to the continuous_trpo folder
-```
-cd continuous_trpo/mujoco
-```
-
 Run the experiment
 ```
-python main.py --env [environment]
+python train_trpo_continuous.py --env [environment]
 ```
 The results are stored in the folder: [logs_json]/
 
@@ -89,4 +84,4 @@ Run the figure script (continuous)
 ```
 python continuous_plots.py 
 ```
-The plots will be saved to ./figures/
+The plots will be saved to ./[figures]/
